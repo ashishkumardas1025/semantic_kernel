@@ -1,0 +1,4 @@
+semantic-kernel==0.3.10.dev
+transformers==4.32.0 
+sentence-transformers==2.2.2  
+curated-transformers==1.1.0
