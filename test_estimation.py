@@ -131,23 +131,124 @@ class CapabilityLookupSystem:
         excel_files = list(Path(SAMPLE_ESTIMATIONS_DIR).glob("*.xlsx"))
         print(f"Found {len(excel_files)} Excel files to process")
         
+        successful_files = 0
+        failed_files = 0
+        total_chunks = 0
+        
         for excel_file in excel_files:
             try:
-                print(f"Processing file: {excel_file.name}")
+                print(f"\n--- Processing file: {excel_file.name} ---")
+                chunks_before = self.collection.count()
+                
                 self._process_excel_file(excel_file)
+                
+                chunks_after = self.collection.count()
+                file_chunks = chunks_after - chunks_before
+                total_chunks += file_chunks
+                
+                print(f"✓ Successfully processed {excel_file.name} ({file_chunks} chunks)")
+                successful_files += 1
+                
             except Exception as e:
-                print(f"Error processing {excel_file.name}: {e}")
+                print(f"✗ Error processing {excel_file.name}: {e}")
+                failed_files += 1
                 continue
         
+        print(f"\n--- Indexing Summary ---")
+        print(f"Total files processed: {successful_files + failed_files}")
+        print(f"Successful: {successful_files}")
+        print(f"Failed: {failed_files}")
+        print(f"Total chunks indexed: {total_chunks}")
         print("Indexing completed!")
+    
+    def validate_excel_file(self, file_path: Path) -> dict:
+        """Validate an Excel file and return detailed information"""
+        validation_result = {
+            "file_name": file_path.name,
+            "file_path": str(file_path),
+            "is_valid": False,
+            "sheets": [],
+            "errors": [],
+            "warnings": [],
+            "header_row": None,
+            "column_mapping": None,
+            "data_rows": 0
+        }
+        
+        try:
+            # Check if file exists
+            if not file_path.exists():
+                validation_result["errors"].append("File does not exist")
+                return validation_result
+            
+            # Get all sheet names
+            xl_file = pd.ExcelFile(file_path)
+            validation_result["sheets"] = xl_file.sheet_names
+            
+            # Check if 'Capability List' sheet exists
+            if "Capability List" not in xl_file.sheet_names:
+                validation_result["errors"].append("'Capability List' sheet not found")
+                return validation_result
+            
+            # Read the sheet without header
+            df_raw = pd.read_excel(file_path, sheet_name="Capability List", header=None)
+            
+            # Find header row
+            header_row_idx, column_mapping = self._find_header_row(df_raw)
+            
+            if header_row_idx is None:
+                validation_result["errors"].append("Could not find required columns")
+                return validation_result
+            
+            validation_result["header_row"] = header_row_idx
+            validation_result["column_mapping"] = column_mapping
+            
+            # Read with proper header
+            df = pd.read_excel(file_path, sheet_name="Capability List", header=header_row_idx)
+            
+            # Apply column mapping
+            if column_mapping:
+                df = df.rename(columns=column_mapping)
+            
+            # Count valid data rows
+            df_clean = df.dropna(subset=["Capability"])
+            df_clean = df_clean[df_clean["Capability"].astype(str).str.strip().astype(bool)]
+            validation_result["data_rows"] = len(df_clean)
+            
+            if validation_result["data_rows"] == 0:
+                validation_result["warnings"].append("No valid data rows found")
+            
+            validation_result["is_valid"] = True
+            
+        except Exception as e:
+            validation_result["errors"].append(f"Error reading file: {str(e)}")
+        
+        return validation_result
 
     def _process_excel_file(self, excel_file_path: Path):
         """Process a single Excel file and extract capability data"""
         try:
-            # Read the Capability List sheet
-            df = pd.read_excel(excel_file_path, sheet_name="Capability List")
+            # Read the Capability List sheet without assuming header row
+            df_raw = pd.read_excel(excel_file_path, sheet_name="Capability List", header=None)
             
-            # Ensure required columns exist
+            # Find the header row and extract column mapping
+            header_row_idx, column_mapping = self._find_header_row(df_raw)
+            
+            if header_row_idx is None:
+                print(f"Could not find required columns in {excel_file_path.name}")
+                return
+            
+            # Read the sheet again with proper header
+            df = pd.read_excel(excel_file_path, sheet_name="Capability List", header=header_row_idx)
+            
+            # Normalize column names (handle variations and extra spaces)
+            df.columns = df.columns.str.strip()
+            
+            # Apply column mapping if needed
+            if column_mapping:
+                df = df.rename(columns=column_mapping)
+            
+            # Ensure required columns exist after mapping
             required_columns = ["Capability", "Scope / Business Description", "System Changes"]
             missing_columns = [col for col in required_columns if col not in df.columns]
             
@@ -157,16 +258,118 @@ class CapabilityLookupSystem:
             
             # Clean the data
             df = df.dropna(subset=["Capability"])  # Remove rows without capability
+            df = df[df["Capability"].str.strip().astype(bool)]  # Remove empty capability cells
+            
+            print(f"Found {len(df)} valid capability rows in {excel_file_path.name}")
             
             # Process each row as a chunk
             for index, row in df.iterrows():
-                self._create_and_store_chunk(row, excel_file_path, index)
+                self._create_and_store_chunk(row, excel_file_path, index + header_row_idx + 1)
                 
         except Exception as e:
             print(f"Error reading Excel file {excel_file_path.name}: {e}")
             raise
 
-    def _create_and_store_chunk(self, row: pd.Series, file_path: Path, row_index: int):
+    def _find_header_row(self, df_raw: pd.DataFrame) -> tuple:
+        """Find the header row containing required columns and return row index and column mapping"""
+        # Define possible column name variations
+        column_variations = {
+            "Capability": [
+                "capability", "capabilities", "cap", "function", "feature",
+                "business capability", "system capability", "functional area"
+            ],
+            "Scope / Business Description": [
+                "scope", "business description", "description", "scope/business description",
+                "scope / business description", "business scope", "scope description",
+                "business desc", "scope/desc", "scope desc", "business detail",
+                "scope/business desc", "scope & business description"
+            ],
+            "System Changes": [
+                "system changes", "system change", "changes", "technical changes",
+                "system modifications", "system updates", "technical details",
+                "implementation", "tech changes", "system impacts", "modifications",
+                "technical implementation", "system requirements"
+            ]
+        }
+        
+        # Search through first 10 rows to find header
+        for row_idx in range(min(10, len(df_raw))):
+            row = df_raw.iloc[row_idx]
+            
+            # Convert row to string and clean
+            row_str = row.astype(str).str.lower().str.strip()
+            
+            # Check if this row contains our required columns
+            found_columns = {}
+            
+            for standard_name, variations in column_variations.items():
+                for col_idx, cell_value in enumerate(row_str):
+                    if pd.isna(cell_value) or cell_value == 'nan':
+                        continue
+                        
+                    # Check if cell value matches any variation
+                    if cell_value in variations or any(var in cell_value for var in variations):
+                        found_columns[standard_name] = df_raw.columns[col_idx]
+                        break
+            
+            # If we found all required columns, this is our header row
+            if len(found_columns) == 3:
+                print(f"Found header row at index {row_idx}")
+                print(f"Column mapping: {found_columns}")
+                
+                # Create reverse mapping for renaming
+                column_mapping = {v: k for k, v in found_columns.items()}
+                return row_idx, column_mapping
+        
+        # If no header found, try fuzzy matching
+        return self._fuzzy_find_header_row(df_raw)
+    
+    def _fuzzy_find_header_row(self, df_raw: pd.DataFrame) -> tuple:
+        """Fuzzy matching for header row when exact match fails"""
+        print("Attempting fuzzy header matching...")
+        
+        # Keywords that should be present in headers
+        capability_keywords = ["capability", "function", "feature", "cap"]
+        scope_keywords = ["scope", "description", "business", "desc"]
+        system_keywords = ["system", "changes", "technical", "implementation"]
+        
+        for row_idx in range(min(10, len(df_raw))):
+            row = df_raw.iloc[row_idx]
+            row_str = row.astype(str).str.lower().str.strip()
+            
+            capability_col = None
+            scope_col = None
+            system_col = None
+            
+            for col_idx, cell_value in enumerate(row_str):
+                if pd.isna(cell_value) or cell_value == 'nan':
+                    continue
+                
+                # Check for capability column
+                if not capability_col and any(keyword in cell_value for keyword in capability_keywords):
+                    capability_col = df_raw.columns[col_idx]
+                
+                # Check for scope/description column
+                if not scope_col and any(keyword in cell_value for keyword in scope_keywords):
+                    scope_col = df_raw.columns[col_idx]
+                
+                # Check for system changes column
+                if not system_col and any(keyword in cell_value for keyword in system_keywords):
+                    system_col = df_raw.columns[col_idx]
+            
+            # If we found reasonable matches for all columns
+            if capability_col and scope_col and system_col:
+                print(f"Fuzzy match found at row {row_idx}")
+                column_mapping = {
+                    capability_col: "Capability",
+                    scope_col: "Scope / Business Description",
+                    system_col: "System Changes"
+                }
+                print(f"Fuzzy column mapping: {column_mapping}")
+                return row_idx, column_mapping
+        
+        print("No suitable header row found")
+        return None, None
         """Create a text chunk from a row and store it in ChromaDB"""
         try:
             # Create chunk text
@@ -314,13 +517,80 @@ class CapabilityLookupSystem:
         """Get statistics about the indexed data"""
         try:
             count = self.collection.count()
+            
+            # Get sample metadata to understand data distribution
+            sample_data = self.collection.get(limit=min(10, count), include=["metadatas"])
+            
+            # Analyze files
+            files_indexed = set()
+            capabilities_count = 0
+            
+            if sample_data and sample_data.get("metadatas"):
+                for metadata in sample_data["metadatas"]:
+                    if metadata.get("file_name"):
+                        files_indexed.add(metadata["file_name"])
+                    if metadata.get("capability"):
+                        capabilities_count += 1
+            
             return {
                 "total_chunks": count,
                 "collection_name": "capability_chunks",
-                "database_path": CHROMA_DB_PATH
+                "database_path": CHROMA_DB_PATH,
+                "files_indexed": len(files_indexed),
+                "sample_files": list(files_indexed),
+                "has_data": count > 0,
+                "sample_capabilities": capabilities_count
             }
         except Exception as e:
             return {"error": str(e)}
+    
+    def validate_all_excel_files(self) -> List[Dict[str, Any]]:
+        """Validate all Excel files in the Sample Estimations directory"""
+        if not os.path.exists(SAMPLE_ESTIMATIONS_DIR):
+            return [{"error": f"Directory {SAMPLE_ESTIMATIONS_DIR} does not exist"}]
+        
+        excel_files = list(Path(SAMPLE_ESTIMATIONS_DIR).glob("*.xlsx"))
+        validation_results = []
+        
+        for excel_file in excel_files:
+            result = self.validate_excel_file(excel_file)
+            validation_results.append(result)
+        
+        return validation_results
+    
+    def get_indexed_files_info(self) -> List[Dict[str, Any]]:
+        """Get information about all indexed files"""
+        try:
+            # Get all data to analyze
+            all_data = self.collection.get(include=["metadatas"])
+            
+            if not all_data or not all_data.get("metadatas"):
+                return []
+            
+            # Group by file
+            files_info = {}
+            for metadata in all_data["metadatas"]:
+                file_name = metadata.get("file_name", "Unknown")
+                
+                if file_name not in files_info:
+                    files_info[file_name] = {
+                        "file_name": file_name,
+                        "file_path": metadata.get("file_path", ""),
+                        "chunk_count": 0,
+                        "capabilities": [],
+                        "indexed_at": metadata.get("indexed_at", "")
+                    }
+                
+                files_info[file_name]["chunk_count"] += 1
+                
+                capability = metadata.get("capability", "")
+                if capability and capability not in files_info[file_name]["capabilities"]:
+                    files_info[file_name]["capabilities"].append(capability)
+            
+            return list(files_info.values())
+            
+        except Exception as e:
+            return [{"error": str(e)}]
 
 
 # Usage example and main functions
@@ -381,13 +651,91 @@ def search_capability_command(query: str):
         print(f"   Similarity: {1 - result['distance']:.3f}")
 
 
+def validate_excel_files_command():
+    """Command-line interface for validating Excel files"""
+    lookup_system = CapabilityLookupSystem()
+    validation_results = lookup_system.validate_all_excel_files()
+    
+    print("Excel Files Validation Report")
+    print("=" * 50)
+    
+    for result in validation_results:
+        print(f"\nFile: {result['file_name']}")
+        print(f"Status: {'✓ VALID' if result['is_valid'] else '✗ INVALID'}")
+        
+        if result.get('header_row') is not None:
+            print(f"Header Row: {result['header_row']}")
+        
+        if result.get('column_mapping'):
+            print("Column Mapping:")
+            for old_col, new_col in result['column_mapping'].items():
+                print(f"  '{old_col}' -> '{new_col}'")
+        
+        if result.get('data_rows') is not None:
+            print(f"Data Rows: {result['data_rows']}")
+        
+        if result.get('errors'):
+            print("Errors:")
+            for error in result['errors']:
+                print(f"  ✗ {error}")
+        
+        if result.get('warnings'):
+            print("Warnings:")
+            for warning in result['warnings']:
+                print(f"  ⚠ {warning}")
+
+
+def show_indexed_files_command():
+    """Command-line interface for showing indexed files"""
+    lookup_system = CapabilityLookupSystem()
+    files_info = lookup_system.get_indexed_files_info()
+    
+    print("Indexed Files Information")
+    print("=" * 50)
+    
+    if not files_info:
+        print("No files have been indexed yet.")
+        return
+    
+    for file_info in files_info:
+        if file_info.get('error'):
+            print(f"Error: {file_info['error']}")
+            continue
+            
+        print(f"\nFile: {file_info['file_name']}")
+        print(f"Path: {file_info['file_path']}")
+        print(f"Chunks: {file_info['chunk_count']}")
+        print(f"Capabilities: {len(file_info['capabilities'])}")
+        print(f"Indexed At: {file_info['indexed_at']}")
+        
+        if file_info['capabilities']:
+            print("Sample Capabilities:")
+            for cap in file_info['capabilities'][:3]:  # Show first 3
+                print(f"  - {cap}")
+            if len(file_info['capabilities']) > 3:
+                print(f"  ... and {len(file_info['capabilities']) - 3} more")
+
+
 if __name__ == "__main__":
     import sys
     
     if len(sys.argv) > 1:
-        # Command-line query
-        query = " ".join(sys.argv[1:])
-        search_capability_command(query)
+        command = sys.argv[1]
+        
+        if command == "validate":
+            validate_excel_files_command()
+        elif command == "files":
+            show_indexed_files_command()
+        elif command == "search":
+            if len(sys.argv) > 2:
+                query = " ".join(sys.argv[2:])
+                search_capability_command(query)
+            else:
+                print("Please provide a search query: python capability_lookup_system.py search 'your query'")
+        else:
+            # Search query
+            query = " ".join(sys.argv[1:])
+            search_capability_command(query)
     else:
         # Run main demo
         main()
