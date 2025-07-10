@@ -83,3 +83,23 @@ consolidated_data = link_and_consolidate_data(capability_list_df, project_tshirt
 # Example output
 for entry in consolidated_data:
     print(entry)
+----------------------
+{
+  "sheet": "Capability List",
+  "capability": "Mutual Funds Product Selection",
+  "scope_business_description": "In OLBB, users need to select mutual fund as a product for selection during investment.",
+  "system_changes": "Enable support for selection in MF accounts at product selection widget.",
+  "Intake BC": "Business Case Details",
+  "Intake SA": "Solution Architecture Details",
+  "Team Information": "OLBB-CUA",
+  "Estimation Contact": "Contact Details",
+  "BA & QA Support": "Support Details (if available)",
+  "Cost Information": {
+    "Low": 1000,
+    "Med": 2000,
+    "Upper": 3000,
+    "Sub Total": 4000,
+    "Project Support": 500,
+    "Total": 4500
+  }
+}
