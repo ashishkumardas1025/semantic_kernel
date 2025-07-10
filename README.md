@@ -1,8 +1,35 @@
+import os
 import pandas as pd
 
-# Load the Excel sheets
-capability_list_df = pd.read_excel("path_to_capability_list.xlsx")
-project_tshirt_df = pd.read_excel("path_to_project_tshirt.xlsx")
+# Directory containing the Excel files
+directory_path = "path_to_directory"
+
+# Initialize lists to hold the data from the sheets
+capability_list_data = []
+project_tshirt_data = []
+
+# Iterate through each file in the directory
+for filename in os.listdir(directory_path):
+    if filename.endswith(".xlsx"):
+        file_path = os.path.join(directory_path, filename)
+
+        # Open the Excel file
+        with pd.ExcelFile(file_path) as xls:
+            # Check for the presence of the relevant sheets
+            if "Capability List" in xls.sheet_names:
+                capability_list_df = pd.read_excel(file_path, sheet_name="Capability List")
+                capability_list_data.append(capability_list_df)
+
+            if "Project T-Shirt" in xls.sheet_names:
+                project_tshirt_df = pd.read_excel(file_path, sheet_name="Project T-Shirt")
+                project_tshirt_data.append(project_tshirt_df)
+
+# Concatenate the data from all files
+if capability_list_data:
+    capability_list_df = pd.concat(capability_list_data, ignore_index=True)
+
+if project_tshirt_data:
+    project_tshirt_df = pd.concat(project_tshirt_data, ignore_index=True)
 
 # Function to link and consolidate data based on capability
 def link_and_consolidate_data(capability_list_df, project_tshirt_df):
