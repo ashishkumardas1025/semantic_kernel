@@ -1,105 +1,54 @@
-import os
-import pandas as pd
+from pydantic import BaseModel, Field
+from typing import List, Optional
 
-# Directory containing the Excel files
-directory_path = "path_to_directory"
+class Cost(BaseModel):
+    """
+    A model to represent the low, mid, and upper cost estimates in dollars.
+    """
+    low: Optional[int] = None
+    mid: Optional[int] = None
+    upper: Optional[int] = None
 
-# Initialize lists to hold the data from the sheets
-capability_list_data = []
-project_tshirt_data = []
+class Team(BaseModel):
+    """
+    A model to represent the details for each team involved in a capability.
+    """
+    name: str = Field(..., alias='Team')
+    estimation_contact: Optional[str] = Field(None, alias='Estimation Contact')
+    ba_qa_support: Optional[str] = Field(None, alias='BA & QA Support')
+    cost: Cost = Field(..., alias='Cost Information')
 
-# Iterate through each file in the directory
-for filename in os.listdir(directory_path):
-    if filename.endswith(".xlsx"):
-        file_path = os.path.join(directory_path, filename)
+class Capability(BaseModel):
+    """
+    A model to represent a single capability, including all associated teams and cost totals.
+    """
+    capability: str
+    teams: List[Team] = Field(..., alias='Team')
+    sub_total: Cost = Field(..., alias='Sub Total')
+    project_support: Cost = Field(..., alias='Project Support')
+    total: Cost = Field(..., alias='Total')
 
-        # Open the Excel file
-        with pd.ExcelFile(file_path) as xls:
-            # Check for the presence of the relevant sheets
-            if "Capability List" in xls.sheet_names:
-                capability_list_df = pd.read_excel(file_path, sheet_name="Capability List")
-                capability_list_data.append(capability_list_df)
+class ProjectTShirt(BaseModel):
+    """
+    The main model to hold a list of all capabilities.
+    """
+    capabilities: List[Capability]
 
-            if "Project T-Shirt" in xls.sheet_names:
-                project_tshirt_df = pd.read_excel(file_path, sheet_name="Project T-Shirt")
-                project_tshirt_data.append(project_tshirt_df)
+-----------------------------------------------------------------------------------------------
+I have a contingency table in sheet called: "Project T-shirt"
+In the table, it has column name as capability , OLBB CUA , OLBB - HP,RPT, etc along with sub total, project support , total. 
+These olbb CUA is the team it has Estimation contact and BA & QA Support and low, mid, upper values. Each row has different capabilities mentioned with its
+low, mid,upper value is dynamic .
+You need to create a json schema to parse this information you can use pydantic for this.
 
-# Concatenate the data from all files
-if capability_list_data:
-    capability_list_df = pd.concat(capability_list_data, ignore_index=True)
-
-if project_tshirt_data:
-    project_tshirt_df = pd.concat(project_tshirt_data, ignore_index=True)
-
-# Function to link and consolidate data based on capability
-def link_and_consolidate_data(capability_list_df, project_tshirt_df):
-    consolidated_data = []
-
-    # Iterate through each row in the Capability List sheet
-    for _, capability_row in capability_list_df.iterrows():
-        capability = capability_row["Capability"]
-        scope_business_description = capability_row["Scope/Business Description"]
-        system_changes = capability_row["System Change"]
-
-        # Find matching capability in the Project T-Shirt sheet
-        matching_rows = project_tshirt_df[project_tshirt_df["Capability"] == capability]
-
-        for _, tshirt_row in matching_rows.iterrows():
-            intake_bc = tshirt_row["Intake BC"]
-            intake_sa = tshirt_row["Intake SA"]
-            team_information = tshirt_row["Team Information"]
-            estimation_contact = tshirt_row["Estimation Contact"]
-            ba_qa_support = tshirt_row.get("BA & QA Support", "")
-            cost_information = {
-                "Low": tshirt_row["Low"],
-                "Med": tshirt_row["Med"],
-                "Upper": tshirt_row["Upper"],
-                "Sub Total": tshirt_row["Sub Total"],
-                "Project Support": tshirt_row["Project Support"],
-                "Total": tshirt_row["Total"]
-            }
-
-            # Create a consolidated entry
-            consolidated_entry = {
-                "sheet": "Capability List",
-                "capability": capability,
-                "scope_business_description": scope_business_description,
-                "system_changes": system_changes,
-                "Intake BC": intake_bc,
-                "Intake SA": intake_sa,
-                "Team Information": team_information,
-                "Estimation Contact": estimation_contact,
-                "BA & QA Support": ba_qa_support,
-                "Cost Information": cost_information
-            }
-
-            consolidated_data.append(consolidated_entry)
-
-    return consolidated_data
-
-# Link and consolidate data
-consolidated_data = link_and_consolidate_data(capability_list_df, project_tshirt_df)
-
-# Example output
-for entry in consolidated_data:
-    print(entry)
-----------------------
-{
-  "sheet": "Capability List",
-  "capability": "Mutual Funds Product Selection",
-  "scope_business_description": "In OLBB, users need to select mutual fund as a product for selection during investment.",
-  "system_changes": "Enable support for selection in MF accounts at product selection widget.",
-  "Intake BC": "Business Case Details",
-  "Intake SA": "Solution Architecture Details",
-  "Team Information": "OLBB-CUA",
-  "Estimation Contact": "Contact Details",
-  "BA & QA Support": "Support Details (if available)",
-  "Cost Information": {
-    "Low": 1000,
-    "Med": 2000,
-    "Upper": 3000,
-    "Sub Total": 4000,
-    "Project Support": 500,
-    "Total": 4500
-  }
-}
+schema = {  "capability": capability,
+            "Team": like: olbb cua, olbb-hp, rpt, Digital core etc are to be stored in team key
+            "Estimation Contact": estimation contact,
+            "BA & QA Support": information,
+            "Cost Information": low, mid, upper. This cost information as in dollars.
+	    "Sub Total": low, mid, upper
+	    "Project Support": low, mid, upper
+	    "Total": low, mid, upper
+        }
+Here each capability is handled by either a single team or multiple teams. Hence it needs to create a json schema based on capability.
+Sharing the image having this information for better response.
