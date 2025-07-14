@@ -1,38 +1,101 @@
-from pydantic import BaseModel, Field
-from typing import List, Optional
-
-class Cost(BaseModel):
-    """
-    A model to represent the low, mid, and upper cost estimates in dollars.
-    """
-    low: Optional[int] = None
-    mid: Optional[int] = None
-    upper: Optional[int] = None
-
-class Team(BaseModel):
-    """
-    A model to represent the details for each team involved in a capability.
-    """
-    name: str = Field(..., alias='Team')
-    estimation_contact: Optional[str] = Field(None, alias='Estimation Contact')
-    ba_qa_support: Optional[str] = Field(None, alias='BA & QA Support')
-    cost: Cost = Field(..., alias='Cost Information')
-
-class Capability(BaseModel):
-    """
-    A model to represent a single capability, including all associated teams and cost totals.
-    """
-    capability: str
-    teams: List[Team] = Field(..., alias='Team')
-    sub_total: Cost = Field(..., alias='Sub Total')
-    project_support: Cost = Field(..., alias='Project Support')
-    total: Cost = Field(..., alias='Total')
-
-class ProjectTShirt(BaseModel):
-    """
-    The main model to hold a list of all capabilities.
-    """
-    capabilities: List[Capability]
+{
+  "initiative": {
+    "title": "Mutual Funds in OLBB",
+    "overview": {
+      "objective": "Extend OLBB Homepage to support mutual fund accounts with product info, balances, holdings (name, price, units, market value, book value), and transaction history.",
+      "TPS_intake_number": 3473,
+      "sizing_level": "T-Shirt"
+    }
+  },
+  "accountable_roles": {
+    "LTO": "Santhosh Kumar Krishnamurthy",
+    "STO": "Chunyuan Wang",
+    "BC": "Charmaine Jackson",
+    "SA": "Ashish Sinha"
+  },
+  "capabilities": [
+    {
+      "id": 1,
+      "name": "Mutual Funds Product Selection",
+      "components": {
+        "LiveLink": {
+          "support_contact": "BA & QA Support",
+          "estimation_contact": "LiveLink Architects",
+          "effort": { "low": null, "mid": null, "high": null }
+        },
+        "OLBB_CUA": {
+          "support_contact": "BA & QA Included",
+          "estimation_contact": "CUA Development Lead",
+          "effort": { "low": null, "mid": null, "high": null }
+        },
+        "OLBB_HP_RPT": {
+          "support_contact": "Aytan Javadova",
+          "estimation_contact": "Reporting Team",
+          "effort": { "low": null, "mid": null, "high": null }
+        },
+        "OLBB_PYMT": {
+          "support_contact": "Mobile Payments Team",
+          "estimation_contact": "Payments Architect",
+          "effort": { "low": null, "mid": null, "high": null }
+        },
+        "IDP": {
+          "support_contact": "BA & QA Support",
+          "estimation_contact": "Integration Dev Lead",
+          "effort": { "low": null, "mid": null, "high": null }
+        }
+      }
+    },
+    {
+      "id": 2,
+      "name": "Entitlement via Onboarding",
+      "components": {
+        "OLBB_CUA": {
+          "support_contact": "BA & QA Included",
+          "estimation_contact": "CUA Development Lead",
+          "effort": { "low": null, "mid": 50, "high": 100 }
+        }
+      }
+    },
+    {
+      "id": 3,
+      "name": "Entitlement via OLBB CUA",
+      "components": {
+        "OLBB_CUA": {
+          "support_contact": "BA & QA Included",
+          "estimation_contact": "CUA Development Lead",
+          "effort": { "low": null, "mid": 100, "high": 150 }
+        }
+      }
+    },
+    {
+      "id": 4,
+      "name": "Foundational Components to Update Homepage",
+      "components": {
+        "OLBB_CUA": {
+          "support_contact": "BA & QA Included",
+          "estimation_contact": "CUA Development Lead",
+          "effort": { "low": null, "mid": 100, "high": 150 }
+        },
+        "OLBB_HP_RPT": {
+          "support_contact": "Aytan Javadova",
+          "estimation_contact": "Reporting Team",
+          "effort": { "low": null, "mid": 100, "high": 125 }
+        }
+      }
+    },
+    {
+      "id": 5,
+      "name": "Homepage Extension for Mutual Funds",
+      "components": {
+        "OLBB_CUA": {
+          "support_contact": "BA & QA Included",
+          "estimation_contact": "CUA Development Lead",
+          "effort": { "low": null, "mid": 150, "high": 200 }
+        }
+      }
+    }
+  ]
+}
 
 -----------------------------------------------------------------------------------------------
 I have a contingency table in sheet called: "Project T-shirt"
