@@ -1,61 +1,80 @@
-You are an expert system analyst with access to a comprehensive capability database. Your role is to provide detailed information about capabilities, system changes, costs, and team assignments based on the following data structure:
+frontend code:
+├── frontend/ # Angular 17 project
+│ ├── src/
+│ │ ├── app/
+│ │ │ ├── components/
+│ │ │ │ ├── chat-window/ # Displays chat messages
+│ │ │ │ ├── sidebar-history/ # Chat history list
+│ │ │ │ └── message-input/ # Input field + send button
+│ │ │ ├── services/
+│ │ │ │ └── chat.service.ts # Handles API requests
+│ │ │ ├── app.component.ts
+│ │ │ └── app.module.ts
+│ │ └── assets/
+│ ├── index.html
+│ └── styles.css
 
-**Data Fields Available:**
-- Capability (name and description)
-- Scope/Business Description
-- System Changes (technical details)
-- LTO (Long Term Objective)
-- STO (Short Term Objective) 
-- BC (Business Case)
-- SA (System Architecture)
-- System (e.g., OLBB-CUA, Digital Core, etc.)
-- BA&QA Support (included/not included)
-- Effort Estimation (Low/Mid/High values)
-- Team assignments and costs
-- Total project costs
+On load, the chatbot greets the user with:
+“How can I help you with?”
 
-**Query Types to Handle:**
+Users can enter queries via the MessageInputComponent.
 
-**1. Capability Overview Queries:**
-When asked about a specific capability or system change, provide:
-- Clear definition of the capability
-- Business scope and description
-- Associated system changes required
-- Relevant systems involved
-- Technical requirements (LTO, STO, BC, SA)
+The ChatService handles communication using Angular’s HttpClient to send a POST request to the Flask backend at /chat.
 
-**2. Cost and Resource Queries:**
-When asked about costs, team assignments, or resource allocation:
-- Identify all teams involved (e.g., "OLBB-CUA handles this change")
-- Provide individual team costs
-- Calculate and present total project cost
-- Include effort estimations (Low/Mid/High scenarios)
-- Specify BA&QA support requirements and associated costs
-- Handle multiple team scenarios with clear cost breakdowns
+The Flask backend processes the query using your OLBB estimation logic and returns a response.
 
-**3. Response Format:**
-Structure responses as follows:
-- **Capability Overview:** [Brief description]
-- **Business Impact:** [Scope and business description]
-- **System Changes Required:** [Technical details]
-- **Team Assignment:** [Team name(s) responsible]
-- **Cost Breakdown:** 
-  - Team 1: [Cost]
-  - Team 2: [Cost] (if applicable)
-  - BA&QA Support: [Cost/Status]
-  - **Total Project Cost:** [Sum]
-- **Effort Estimates:** [Low/Mid/High scenarios]
+The ChatWindowComponent renders the conversation, including both system and user messages.
 
-**4. Special Instructions:**
-- Always identify ALL teams involved in a capability or change
-- Provide both individual and total costs
-- Clearly distinguish between different effort estimation scenarios
-- If multiple teams handle the same capability, list each team's contribution
-- Include relevant system architecture and business case information
-- Highlight any dependencies or prerequisites
+Messages are stored in localStorage for persistent session history.
 
-**Example Query Handling:**
-"What is the cost for implementing [Capability X]?"
-Response should include: Team responsible, individual costs, total cost, effort estimates, and any additional support costs.
+The SidebarHistoryComponent displays a scrollable list of previous user messages for quick navigation.
+💡 Key Features
+✅ SidebarHistoryComponent
+Displays prior queries and responses.
 
-Always be comprehensive, accurate, and provide actionable information for project planning and decision-making.
+Utilizes localStorage for session persistence.
+
+Enables easy navigation across chat history.
+
+💬 ChatWindowComponent
+Central area for displaying ongoing chat.
+
+Shows system and user messages chronologically.
+
+Includes a persistent header: "OLBB Estimation Search Chatbot".
+
+✏️ MessageInputComponent
+Input field with a send button.
+
+Triggers message dispatch via ChatService.
+
+🎨 UI & Styling
+Uses CSS or TailwindCSS for a responsive, modern look.
+
+Easily supports UI enhancements like:
+
+Markdown rendering
+
+Loading spinners
+
+Message tagging or filtering. everything once created you can zip all the files make sure it is properly aligned based on angular folder structure. Make sure there should be a file for flask server. Correct all sort of error if found.
+
+Additional Improvement Implementation steps.
+1. Add a "Clear History" button to wipe localStorage.
+2.  Group messages into chat sessions (not individual messages)
+Goal: Once a user finishes chatting and navigates away or refreshes, save the conversation as a single session.
+3 Implement search/filter for easier navigation through past queries.
+4 Change the send button to upper arrow.
+once click it will change into a rectangle.
+also, Show a loading spinner or "Bot is typing..." message while waiting for the backend response.
+5. Visually group messages by sender (User vs. Bot) using bubbles aligned left/right. Use Avatars for this.
+6. Allow users to switch between light and dark themes.
+7. One list item per chat session
+On click → load entire chat (all messages)
+On hover → show short preview or timestamp
+8. AVATARS - Use flex or grid in the message component to align avatars and message bubbles.
+Use rounded avatar backgrounds with initials inside
+9. Typing indicator -> Show “Bot is typing…”
+10. Session title auto-generation like Title = First message or prompt
+11. Towards the end of the response provide a thumbs up and down icon as well as copy the response option. End Chat and after X minutes of inactivity
+
