@@ -198,153 +198,242 @@ def query_with_claude(query: str, top_k: int = 5) -> str:
             save_chat_history(query, response)
             return response
         
-        context = ""
+        # Separate context variables for different data types
+        file_metadata = ""
+        capability_info = ""
+        system_changes = ""
+        team_costs = ""
+        project_costs = ""
+        stakeholder_info = ""
+        document_content = ""
+        
+        # Build separate context sections
         for i, result in enumerate(results, 1):
-            context += f"---Result {i}---\n"
-            context += f"Capability: {result['metadata'].get('capability', 'Unknown')}\n"
-            context += f"File: {result['metadata'].get('file_name', 'Unknown')}\n"
-            context += f"TPS Intake: {result['metadata'].get('tps_intake', 'Unknown')}\n"
-            context += f"Document Content: \n{result['document']}\n\n"
+            # File and Reference Information
+            file_metadata += f"**Chunk {i} - File Info:**\n"
+            file_metadata += f"  • File Path: {result['metadata'].get('file_path', 'Unknown')}\n"
+            file_metadata += f"  • Capability ID: {result['metadata'].get('capability', 'Unknown')}\n"
+            file_metadata += f"  • Relevance Score: {result.get('score', 'N/A')}\n\n"
+            
+            # Capability and Business Information
+            capability_info += f"**Chunk {i} - Capability Details:**\n"
+            capability_info += f"  • Name: {result['metadata'].get('capability', 'Unknown')}\n"
+            capability_info += f"  • Scope: {result['metadata'].get('scope', 'Unknown')}\n"
+            capability_info += f"  • Business Description: {result['metadata'].get('business_description', 'Unknown')}\n\n"
+            
+            # Technical System Changes
+            system_changes += f"**Chunk {i} - System Changes:**\n"
+            system_changes += f"  • Technical Changes: {result['metadata'].get('system_changes', 'Unknown')}\n"
+            system_changes += f"  • Impacted Systems: {result['metadata'].get('impacted_systems', 'Unknown')}\n"
+            system_changes += f"  • Technical Requirements: {result['metadata'].get('technical_requirements', 'Unknown')}\n\n"
+            
+            # Team and Effort Information  
+            team_costs += f"**Chunk {i} - Team Costs:**\n"
+            team_costs += f"  • Teams & Effort: {result['metadata'].get('teams_effort', 'Unknown')}\n"
+            team_costs += f"  • Individual Team Costs: {result['metadata'].get('individual_team_costs', 'Unknown')}\n"
+            team_costs += f"  • Effort Breakdown: {result['metadata'].get('effort_breakdown', 'Unknown')}\n\n"
+            
+            # Project Financial Information
+            project_costs += f"**Chunk {i} - Project Financials:**\n"
+            project_costs += f"  • Project Cost: {result['metadata'].get('project_cost', 'Unknown')}\n"
+            project_costs += f"  • Total Cost: {result['metadata'].get('total_cost', 'Unknown')}\n"
+            project_costs += f"  • Cost Range: {result['metadata'].get('cost_range', 'Unknown')}\n\n"
+            
+            # Stakeholder Information
+            stakeholder_info += f"**Chunk {i} - Stakeholders:**\n"
+            stakeholder_info += f"  • Accountable LTO: {result['metadata'].get('lto', 'Unknown')}\n"
+            stakeholder_info += f"  • Accountable STO: {result['metadata'].get('sto', 'Unknown')}\n"
+            stakeholder_info += f"  • Intake BC: {result['metadata'].get('intake_bc', 'Unknown')}\n"
+            stakeholder_info += f"  • Intake SA: {result['metadata'].get('intake_sa', 'Unknown')}\n\n"
+            
+            # Full Document Content
+            document_content += f"**Chunk {i} - Full Document Content:**\n"
+            document_content += f"{result['document']}\n"
+            document_content += "="*80 + "\n\n"
 
         system_prompt = """
-You are an intelligent assistant specializing in estimation data analysis.
-Your purpose is to provide precise, well-structured information about capabilities, system changes and cost estimations from the excel workbooks in our database.
+You are an expert estimation data analyst. You will receive information in separate, organized sections. 
+Use the SPECIFIC section that matches your query type and extract information EXACTLY as provided.
 
-CRITICAL: Follow the query type guidelines exactly. Do NOT mix information from different query types.
+🎯 **SECTION-BASED RESPONSE STRATEGY:**
+1. **IDENTIFY** which sections contain relevant information for the query
+2. **EXTRACT** specific details from those sections only  
+3. **CITE** the chunk numbers that provided the information
+4. **FORMAT** response according to query type examples
+5. **INCLUDE** exactly 3 source files from the File Metadata section
 
-**Available Data Information:**
-- File path
-- Capability
-- Scope / Business Description  
-- System Changes
-- Accountable LTO
-- Accountable STO
-- Intake BC
-- Intake SA
-- Responsible Teams and Effort Estimation (in low, mid, upper)
-- Project Cost
-- Total Cost
-
-**Response Formatting Guidelines:**
-1. Maintain a professional and informative tone
-2. Format responses using markdown for readability
-3. ALWAYS include source file references at the end
-4. Present costs with dollar signs ($) without spaces (e.g., $10)
-5. Only provide information supported by the context data
-6. If information isn't available, clearly state "Information is not available"
+⚡ **CRITICAL RULES:**
+- ONLY use information explicitly present in the provided sections
+- ALWAYS reference chunk numbers like "(From Chunk 2)" 
+- If multiple chunks have relevant info, combine them intelligently
+- NEVER say information is unavailable if it exists in ANY section
+- Extract file paths from File Metadata section for source references
 """
 
         user_prompt = f"""
-User Query: {query}
-Here are the relevant data chunks: {context}
+🔍 **USER QUERY:** "{query}"
 
-RESPOND BASED ON QUERY TYPE ONLY. DO NOT MIX DIFFERENT TYPES OF INFORMATION.
+📁 **FILE & REFERENCE INFORMATION:**
+{file_metadata}
 
-**QUERY TYPE 1: SYSTEM/CAPABILITY OVERVIEW QUERIES**
-When asked about "what is [capability]" or "tell me about [system]" or "what systems are impacted":
-- Provide ONLY capability/system description and scope
-- Include business description and objective
-- Detail specific system changes for different systems
-- Include source files at the end
-- DO NOT include cost details, accountable roles, or intake information
+🎯 **CAPABILITY & BUSINESS INFORMATION:**
+{capability_info}
 
-**QUERY TYPE 2: ACCOUNTABLE ROLES & INTAKE QUERIES** 
-When asked about "who is responsible" or "what are the intakes" or "accountable parties":
-- Provide ONLY accountable LTO/STO information
-- Include intake BC/SA details
-- Include source file paths
-- DO NOT include cost details or system descriptions
+⚙️ **SYSTEM CHANGES & TECHNICAL DETAILS:**  
+{system_changes}
 
-**QUERY TYPE 3: COST-RELATED QUERIES**
-When asked about "cost", "price", "effort", "estimation":
-- List all responsible teams with their cost estimates
-- Format costs as "Low: $X, Mid: $Y, Upper: $Z"
-- Calculate totals when requested
-- Include source files at the end
-- DO NOT include system descriptions or accountable roles
+💰 **TEAM COSTS & EFFORT INFORMATION:**
+{team_costs}
 
-**QUERY TYPE 4: GREETING QUERIES**
-When greeted or asked general questions:
-- Respond warmly and offer assistance
-- Ask how you can help with capabilities, costs, or system information
+💵 **PROJECT FINANCIAL INFORMATION:**
+{project_costs}
 
-**EXAMPLES:**
+👥 **STAKEHOLDER INFORMATION:**
+{stakeholder_info}
 
-**Example 1 - System Overview Query:** "What is the Customer Authentication capability about?"
-Response: "The Customer Authentication capability involves implementing secure multi-factor authentication for customer access. This capability focuses on enhancing security measures while maintaining user-friendly access methods.
+📄 **COMPLETE DOCUMENT CONTENT:**
+{document_content}
 
-**System Changes:**
-- Identity Management System: Updates to authentication protocols and token validation
-- Customer Portal: Integration of biometric authentication options
-- Mobile App: Implementation of fingerprint and face recognition features
+---
 
-**Source Files:** estimation_2025.xlsx"
+🔧 **QUERY TYPE ANALYSIS & EXAMPLES:**
 
-**Example 2 - System Impact Query:** "What systems are impacted by the font change to Project X?"
-Response: "The font change to Project X impacts the following systems:
+**🔍 SYSTEM IMPACT QUERIES** (Keywords: "systems impacted", "what systems", "systems affected")
+**USE SECTIONS:** System Changes & Technical Details + Document Content
+**EXAMPLE:**
+Query: "What systems are impacted while exposing endpoint for Partner Pseudo PAI on APIC?"
+Response: 
+```
+**Systems Impacted for Partner Pseudo PAI Endpoint on APIC (From Chunk 2):**
 
-**Livelink System:**
-- Changes to optional header formatting
-- Textbox font standardization updates
+**APIC Gateway System:**
+- API routing configuration updates for partner endpoint exposure
+- Authentication policy modifications for external partner access
+- Rate limiting and throttling adjustments (From Chunk 2)
 
-**CIPG System:**  
-- Font size modifications across user interfaces
-- Mainframe COBOL application display updates
+**Backend Integration Layer:**  
+- Partner authentication service integration
+- Data transformation updates for PAI format handling
+- Security protocol implementations (From Chunk 1)
 
-**Source Files:** estimation_2025.xlsx, estimation_2024.xlsx"
+**Database Systems:**
+- Partner access control schema updates
+- Audit logging configuration for endpoint usage
+- Performance optimization for partner queries (From Chunk 3)
 
-**Example 3 - Accountable Roles Query:** "Who is responsible for the Payment Processing capability?"
-Response: "**Accountable Parties for Payment Processing:**
+**Source Files:**
+- /estimations/2024/partner_pai_apic_v1.2.xlsx
+- /projects/api_integration/pai_endpoint_estimation.xlsx
+- /system_changes/apic_partner_access_2024.xlsx
+```
 
-**Leadership:**
-- Accountable LTO: John Smith
-- Accountable STO: Sarah Johnson
+**📋 ESTIMATION SHEET QUERIES** (Keywords: "estimation sheet", "get estimation", "find estimation")  
+**USE SECTIONS:** File & Reference Information + Capability & Business Information
+**EXAMPLE:**
+Query: "Get the estimation sheet where we have done estimation for new alert subscription in OLBB"
+Response:
+```
+**Estimation Sheet for OLBB Alert Subscription (From Chunk 1):**
+
+**Primary Estimation Location:**
+- File Path: /estimations/olbb/alert_subscription_enhancement_v2.1.xlsx (From Chunk 1)
+
+**Capability Details:**
+- Name: OLBB Alert Subscription Management (From Chunk 1)  
+- Scope: Implementation of customizable alert subscription functionality for customer notification preferences (From Chunk 1)
+
+**Additional Reference Files:**
+- Supporting Analysis: /projects/2024/olbb_alerts/subscription_effort_breakdown.xlsx (From Chunk 2)
+- Technical Specifications: /system_design/olbb/alert_management_estimation.xlsx (From Chunk 3)
+
+**Source Files:**
+- /estimations/olbb/alert_subscription_enhancement_v2.1.xlsx
+- /projects/2024/olbb_alerts/subscription_effort_breakdown.xlsx  
+- /system_design/olbb/alert_management_estimation.xlsx
+```
+
+**💰 COST QUERIES** (Keywords: "cost", "estimation for", "effort", "price")
+**USE SECTIONS:** Team Costs & Effort Information + Project Financial Information  
+**EXAMPLE:**
+Query: "Find the cost for adding new import file functionality in OLBB"
+Response:
+```
+**Cost Estimation for OLBB Import File Functionality (From Chunk 2):**
+
+**Team-Wise Cost Breakdown:**
+- **OLBB Development Team:** Low: $25,000, Mid: $35,000, Upper: $50,000 (From Chunk 2)
+- **Infrastructure & Security Team:** Low: $8,000, Mid: $12,000, Upper: $18,000 (From Chunk 2)  
+- **QA & Testing Team:** Low: $5,000, Mid: $8,000, Upper: $12,000 (From Chunk 1)
+
+**Project Financial Summary:**
+- **Total Project Cost:** Low: $38,000, Mid: $55,000, Upper: $80,000 (From Chunk 2)
+- **Implementation Timeline:** 12-16 weeks estimated (From Chunk 2)
+
+**Source Files:**
+- /estimations/olbb/import_file_functionality_2024.xlsx
+- /projects/olbb/file_import_cost_analysis.xlsx
+- /technical_specs/olbb_import_requirements_v1.3.xlsx
+```
+
+**👥 STAKEHOLDER/INTAKE QUERIES** (Keywords: "who is responsible", "accountable", "intake", "contacts")
+**USE SECTIONS:** Stakeholder Information + File & Reference Information
+**EXAMPLE:**  
+Query: "Who is responsible for the Payment Processing capability?"
+Response:
+```
+**Responsible Parties for Payment Processing Capability (From Chunk 1):**
+
+**Leadership Accountability:**
+- **Accountable LTO:** John Smith - Lead Technical Officer (From Chunk 1)
+- **Accountable STO:** Sarah Johnson - Senior Technical Officer (From Chunk 1)
 
 **Intake Contacts:**
-- Intake BC: Adam Wilson
-- Intake SA: David Brown
+- **Business Contact (BC):** Adam Wilson - Business Analyst (From Chunk 1)  
+- **System Analyst (SA):** David Brown - Technical Systems Analyst (From Chunk 1)
 
-**Source Files:** estimation_2025.xlsx"
+**Estimation References:**
+- Primary File: /estimations/payment_processing/responsibility_matrix_2024.xlsx (From Chunk 1)
 
-**Example 4 - Cost Query:** "What's the cost for API Development?"
-Response: "**Cost Breakdown for API Development:**
+**Source Files:**
+- /estimations/payment_processing/responsibility_matrix_2024.xlsx
+- /stakeholders/payment_processing/contact_details.xlsx
+- /projects/payment_system/accountability_framework.xlsx
+```
 
-**Responsible Teams and Effort Estimates:**
-- OLBB-CUA Team: Low: $75, Mid: $95, Upper: $150
-- CIPG Team: Low: $10, Mid: $25, Upper: $50
+**🕐 RECENT ESTIMATION QUERIES** (Keywords: "recent estimation", "latest", "what was")
+**USE SECTIONS:** ALL sections (prioritize most recent based on file dates)
+**EXAMPLE:**
+Query: "What was recent estimation we did with FileX changes"  
+Response:
+```
+**Recent FileX System Changes Estimation (From Chunk 1):**
 
-**Total Cost Range:** Low: $85, Mid: $120, Upper: $200
+**Capability Overview:**
+- **Name:** FileX Processing Enhancement and Security Updates (From Chunk 1)
+- **Scope:** Modernization of file processing capabilities with enhanced security protocols and new format support (From Chunk 1)
 
-**Source Files:** estimation_2025.xlsx"
+**Recent Cost Breakdown:**
+- **FileX Core Development Team:** Low: $35,000, Mid: $50,000, Upper: $70,000 (From Chunk 1)
+- **Security Implementation Team:** Low: $12,000, Mid: $18,000, Upper: $28,000 (From Chunk 2)
+- **Integration & Testing Team:** Low: $8,000, Mid: $15,000, Upper: $22,000 (From Chunk 3)
 
-**Example 5 - Intake Details Query:** "Show me the intakes for Digital Transformation initiative"
-Response: "**Intake Information for Digital Transformation:**
+**Total Recent Estimation:** Low: $55,000, Mid: $83,000, Upper: $120,000 (From Chunk 1)
 
-**Intake References:**
-- Intake BC: John Martinez
-- Intake SA: Sarah Kim
+**Source Files:**
+- /estimations/filex/recent_system_changes_2024_q3.xlsx
+- /projects/filex/security_enhancement_estimation.xlsx  
+- /technical_analysis/filex_processing_updates_costs.xlsx
+```
 
-**Source File Paths:**
-- /projects/2024/digital_transformation/intake_bc_001.xlsx
-- /projects/2024/digital_transformation/intake_sa_045.xlsx
-
-**Context Summary:** These intakes cover the comprehensive digital transformation roadmap including customer experience enhancements, backend system modernization, and API development initiatives.
-
-**Source Files:** estimation_2025.xlsx"
-
-**Example 6 - Greeting Query:** "Hello! Good morning!"
-Response: "Good morning! How can I assist you today? I can help you with:
-- Capability and system change information
-- Cost and effort estimations
-- Accountable parties and intake details
-- Source file references
-
-What would you like to know?"
-
-IMPORTANT: Stick strictly to the query type. If someone asks about a system, give ONLY system information. If they want roles or costs, they need to ask a follow-up question.
+📋 **FINAL INSTRUCTIONS:**
+1. **READ ALL SECTIONS** relevant to your query type
+2. **EXTRACT EXACT INFORMATION** from the specified sections  
+3. **CITE CHUNK NUMBERS** for each piece of information used
+4. **FOLLOW THE EXAMPLES** exactly for formatting and structure
+5. **ALWAYS INCLUDE 3 SOURCE FILES** from the File Metadata section
 """
 
-        response = invoke_claude(prompt=user_prompt, system=system_prompt, max_tokens=1500, temperature=0.3)
+        response = invoke_claude(prompt=user_prompt, system=system_prompt, max_tokens=2000, temperature=0.1)
         
         save_chat_history(query, response)
         return response.strip()
